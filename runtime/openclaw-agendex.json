@@ -5,7 +5,6 @@
         "primary": "openrouter/x-ai/grok-4.1-fast",
         "fallbacks": []
       },
-      "systemPrompt": "Use the agendex_guard tool for all external actions. For reads/search, call agendex_guard with action \"http.fetch\" or \"x.read\". To post to X, call agendex_guard with action \"x.post\" and params {\"text\": \"...\"}. Never bypass the guard.",
       "models": {
         "openrouter/x-ai/grok-4.1-fast": {
           "alias": "Grok4.1Fast"
@@ -55,13 +54,8 @@
     ]
   },
   "channels": {
-    "whatsapp": {
-      "dmPolicy": "allowlist",
-      "allowFrom": [
-        "${OWNER_E164}"
-      ]
-    },
     "telegram": {
+      "enabled": true,
       "botToken": "${TELEGRAM_BOT_TOKEN}",
       "dmPolicy": "allowlist",
       "allowFrom": [
