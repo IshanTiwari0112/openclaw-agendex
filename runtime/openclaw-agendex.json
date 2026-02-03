@@ -1,0 +1,58 @@
+{
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "openrouter/x-ai/grok-4.1-fast",
+        "fallbacks": []
+      },
+      "systemPrompt": "Use the agendex_guard tool for all external actions. To post to X, call agendex_guard with action \"x.post\" and params {\"text\": \"...\"}. Never bypass the guard.",
+      "models": {
+        "openrouter/x-ai/grok-4.1-fast": {
+          "alias": "Grok4.1Fast"
+        }
+      }
+    }
+  },
+  "plugins": {
+    "load": {
+      "paths": [
+        "./extensions/agendex-guard"
+      ]
+    },
+    "entries": {
+      "agendex-guard": {
+        "enabled": true,
+        "config": {
+          "guardUrl": "${AGENDEX_GUARD_URL}",
+          "defaultTask": "openclaw_social",
+          "timeoutMs": 15000,
+          "contextDefaults": {
+            "agent_identity": "openclaw-bot"
+          },
+          "interceptOutbound": true,
+          "outboundAction": "message.send"
+        }
+      }
+    }
+  },
+  "tools": {
+    "allow": [
+      "agendex_guard"
+    ]
+  },
+  "channels": {
+    "whatsapp": {
+      "dmPolicy": "allowlist",
+      "allowFrom": [
+        "${OWNER_E164}"
+      ]
+    },
+    "telegram": {
+      "botToken": "${TELEGRAM_BOT_TOKEN}",
+      "dmPolicy": "allowlist",
+      "allowFrom": [
+        "${OWNER_TG}"
+      ]
+    }
+  }
+}

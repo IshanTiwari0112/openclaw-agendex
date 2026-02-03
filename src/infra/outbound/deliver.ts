@@ -24,6 +24,7 @@ import {
 import { markdownToSignalTextChunks, type SignalTextStyleRange } from "../../signal/format.js";
 import { sendMessageSignal } from "../../signal/send.js";
 import { normalizeReplyPayloadsForDelivery } from "./payloads.js";
+import { getGlobalHookRunner } from "../../plugins/hook-runner-global.js";
 
 export type { NormalizedOutboundPayload } from "./payloads.js";
 export { normalizeOutboundPayloads } from "./payloads.js";
@@ -232,6 +233,8 @@ export async function deliverOutboundPayloads(params: {
         accountId,
       })
     : undefined;
+  const hookRunner = getGlobalHookRunner();
+  const hasMessageHooks = hookRunner?.hasHooks("message_sending") ?? false;
 
   const sendTextChunks = async (text: string) => {
     throwIfAborted(abortSignal);
@@ -324,6 +327,42 @@ export async function deliverOutboundPayloads(params: {
       mediaUrls: payload.mediaUrls ?? (payload.mediaUrl ? [payload.mediaUrl] : []),
       channelData: payload.channelData,
     };
+    if (hasMessageHooks) {
+      try {
+        const hookResult = await hookRunner!.runMessageSending(
+          {
+            to,
+            content: payloadSummary.text,
+            metadata: {
+              channel,
+              accountId,
+              replyToId: params.replyToId ?? undefined,
+              threadId: params.threadId ?? undefined,
+              mediaUrls: payloadSummary.mediaUrls,
+              channelData: payloadSummary.channelData,
+            },
+          },
+          {
+            channelId: channel,
+            accountId,
+            conversationId: to,
+          },
+        );
+        if (hookResult?.cancel) {
+          continue;
+        }
+        if (typeof hookResult?.content === "string") {
+          payloadSummary.text = hookResult.content;
+          payload.text = hookResult.content;
+        }
+      } catch (err) {
+        if (!params.bestEffort) {
+          throw err;
+        }
+        params.onError?.(err, payloadSummary);
+        continue;
+      }
+    }
     try {
       throwIfAborted(abortSignal);
       params.onPayload?.(payloadSummary);

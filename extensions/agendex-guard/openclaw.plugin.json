@@ -1,0 +1,36 @@
+{
+  "id": "agendex-guard",
+  "name": "Agendex Guard",
+  "description": "Route agent actions through an Agendex guard service for governed execution.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "guardUrl": {
+        "type": "string",
+        "description": "Base URL for the guard service (e.g. http://guard:8080)."
+      },
+      "timeoutMs": {
+        "type": "number",
+        "description": "HTTP timeout for guard calls (default: 15000)."
+      },
+      "defaultTask": {
+        "type": "string",
+        "description": "Default task label when tool calls omit task."
+      },
+      "contextDefaults": {
+        "type": "object",
+        "description": "Default context fields merged into each guard request.",
+        "additionalProperties": true
+      },
+      "interceptOutbound": {
+        "type": "boolean",
+        "description": "When true, intercept outbound channel messages and route them through the guard."
+      },
+      "outboundAction": {
+        "type": "string",
+        "description": "Action name used for outbound channel messages (default: message.send)."
+      }
+    }
+  }
+}
