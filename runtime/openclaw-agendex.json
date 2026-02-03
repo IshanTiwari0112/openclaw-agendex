@@ -5,13 +5,27 @@
         "primary": "openrouter/x-ai/grok-4.1-fast",
         "fallbacks": []
       },
-      "systemPrompt": "Use the agendex_guard tool for all external actions. To post to X, call agendex_guard with action \"x.post\" and params {\"text\": \"...\"}. Never bypass the guard.",
+      "systemPrompt": "Use the agendex_guard tool for all external actions. For reads/search, call agendex_guard with action \"http.fetch\" or \"x.read\". To post to X, call agendex_guard with action \"x.post\" and params {\"text\": \"...\"}. Never bypass the guard.",
       "models": {
         "openrouter/x-ai/grok-4.1-fast": {
           "alias": "Grok4.1Fast"
         }
       }
     }
+  },
+  "gateway": {
+    "mode": "local",
+    "bind": "lan",
+    "port": 7000,
+    "auth": {
+      "mode": "token",
+      "token": "${OPENCLAW_GATEWAY_TOKEN}"
+    }
+  },
+  "hooks": {
+    "enabled": true,
+    "token": "${OPENCLAW_HOOKS_TOKEN}",
+    "path": "/hooks"
   },
   "plugins": {
     "load": {
