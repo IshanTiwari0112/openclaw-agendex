@@ -33,6 +33,9 @@
       ]
     },
     "entries": {
+      "telegram": {
+        "enabled": true
+      },
       "agendex-guard": {
         "enabled": true,
         "config": {
