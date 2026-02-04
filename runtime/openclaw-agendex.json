@@ -1,6 +1,7 @@
 {
   "agents": {
     "defaults": {
+      "workspace": "/data/openclaw/workspace",
       "model": {
         "primary": "openrouter/x-ai/grok-4.1-fast",
         "fallbacks": []
@@ -9,6 +10,18 @@
         "openrouter/x-ai/grok-4.1-fast": {
           "alias": "Grok4.1Fast"
         }
+      }
+    }
+  },
+  "session": {
+    "reset": {
+      "mode": "idle",
+      "idleMinutes": 43200
+    },
+    "resetByChannel": {
+      "telegram": {
+        "mode": "idle",
+        "idleMinutes": 43200
       }
     }
   },
