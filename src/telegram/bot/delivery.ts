@@ -12,6 +12,7 @@ import { fetchRemoteMedia } from "../../media/fetch.js";
 import { isGifMedia } from "../../media/mime.js";
 import { saveMediaBuffer } from "../../media/store.js";
 import { loadWebMedia } from "../../web/media.js";
+import { getGlobalHookRunner } from "../../plugins/hook-runner-global.js";
 import { withTelegramApiErrorLogging } from "../api-logging.js";
 import { splitTelegramCaption } from "../caption.js";
 import {
@@ -61,10 +62,44 @@ export async function deliverReplies(params: {
     replyQuoteText,
   } = params;
   const chunkMode = params.chunkMode ?? "length";
+  const hookRunner = getGlobalHookRunner();
+  const hasMessageHooks = hookRunner?.hasHooks("message_sending") ?? false;
+  const guardRequired =
+    process.env.OPENCLAW_REQUIRE_GUARD === "1" || process.env.AGENDEX_GUARD_REQUIRED === "1";
+  if (guardRequired && !hasMessageHooks) {
+    throw new Error("agendex_guard_required: message_sending hook not registered");
+  }
   let hasReplied = false;
   let hasDelivered = false;
   const markDelivered = () => {
     hasDelivered = true;
+  };
+  const applyOutboundGuard = async (content: string, metadata?: Record<string, unknown>) => {
+    if (!hasMessageHooks) {
+      return { cancel: false, content };
+    }
+    const hookResult = await hookRunner!.runMessageSending(
+      {
+        to: chatId,
+        content,
+        metadata: {
+          channel: "telegram",
+          chatId,
+          ...metadata,
+        },
+      },
+      {
+        channelId: "telegram",
+        conversationId: chatId,
+      },
+    );
+    if (hookResult?.cancel) {
+      return { cancel: true, content };
+    }
+    if (typeof hookResult?.content === "string") {
+      return { cancel: false, content: hookResult.content };
+    }
+    return { cancel: false, content };
   };
   const chunkText = (markdown: string) => {
     const markdownChunks =
@@ -101,12 +136,23 @@ export async function deliverReplies(params: {
       : reply.mediaUrl
         ? [reply.mediaUrl]
         : [];
+    const guardResult = await applyOutboundGuard(reply.text ?? "", {
+      mediaCount: mediaList.length,
+      hasMedia,
+      replyToId: replyToId ?? undefined,
+      threadId: thread?.id,
+      channelData: reply.channelData,
+    });
+    if (guardResult.cancel) {
+      continue;
+    }
+    const guardedText = guardResult.content;
     const telegramData = reply.channelData?.telegram as
       | { buttons?: Array<Array<{ text: string; callback_data: string }>> }
       | undefined;
     const replyMarkup = buildInlineKeyboard(telegramData?.buttons);
     if (mediaList.length === 0) {
-      const chunks = chunkText(reply.text || "");
+      const chunks = chunkText(guardedText || "");
       for (let i = 0; i < chunks.length; i += 1) {
         const chunk = chunks[i];
         if (!chunk) {
@@ -148,7 +194,7 @@ export async function deliverReplies(params: {
       const file = new InputFile(media.buffer, fileName);
       // Caption only on first item; if text exceeds limit, defer to follow-up message.
       const { caption, followUpText } = splitTelegramCaption(
-        isFirstMedia ? (reply.text ?? undefined) : undefined,
+        isFirstMedia ? (guardedText || undefined) : undefined,
       );
       const htmlCaption = caption
         ? renderTelegramHtmlText(caption, { tableMode: params.tableMode })
@@ -215,7 +261,7 @@ export async function deliverReplies(params: {
             // This happens when the recipient has Telegram Premium privacy settings
             // that block voice messages (Settings > Privacy > Voice Messages).
             if (isVoiceMessagesForbidden(voiceErr)) {
-              const fallbackText = reply.text;
+              const fallbackText = guardedText;
               if (!fallbackText || !fallbackText.trim()) {
                 throw voiceErr;
               }

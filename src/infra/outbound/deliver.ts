@@ -235,6 +235,12 @@ export async function deliverOutboundPayloads(params: {
     : undefined;
   const hookRunner = getGlobalHookRunner();
   const hasMessageHooks = hookRunner?.hasHooks("message_sending") ?? false;
+  const guardRequired =
+    process.env.OPENCLAW_REQUIRE_GUARD === "1" ||
+    process.env.AGENDEX_GUARD_REQUIRED === "1";
+  if (guardRequired && !hasMessageHooks) {
+    throw new Error("agendex_guard_required: message_sending hook not registered");
+  }
 
   const sendTextChunks = async (text: string) => {
     throwIfAborted(abortSignal);
