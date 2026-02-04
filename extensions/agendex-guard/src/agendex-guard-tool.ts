@@ -27,7 +27,7 @@ type GuardResponse = {
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_OUTBOUND_ACTION = "message.send";
-const DEFAULT_OUTBOUND_FOOTER = "— Verified by Agendex.io";
+const DEFAULT_OUTBOUND_FOOTER = "— Verified by Agendex";
 
 function readRequiredString(params: Record<string, unknown>, key: string, label = key): string {
   const raw = params[key];
