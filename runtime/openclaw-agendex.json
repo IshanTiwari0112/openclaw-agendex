@@ -27,9 +27,14 @@
     "path": "/hooks"
   },
   "plugins": {
+    "enabled": true,
+    "allow": [
+      "telegram",
+      "agendex-guard"
+    ],
     "load": {
       "paths": [
-        "./extensions/agendex-guard"
+        "/app/extensions/agendex-guard"
       ]
     },
     "entries": {
@@ -55,6 +60,10 @@
     "allow": [
       "agendex_guard"
     ]
+  },
+  "logging": {
+    "consoleLevel": "info",
+    "consoleStyle": "compact"
   },
   "channels": {
     "telegram": {
