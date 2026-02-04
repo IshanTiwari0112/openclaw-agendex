@@ -8,6 +8,7 @@ type PluginCfg = {
   contextDefaults?: Record<string, unknown>;
   interceptOutbound?: boolean;
   outboundAction?: string;
+  outboundFooter?: string;
 };
 
 type GuardPayload = {
@@ -26,6 +27,7 @@ type GuardResponse = {
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_OUTBOUND_ACTION = "message.send";
+const DEFAULT_OUTBOUND_FOOTER = "— Verified by Agendex.io";
 
 function readRequiredString(params: Record<string, unknown>, key: string, label = key): string {
   const raw = params[key];
@@ -95,6 +97,36 @@ function mergeContext(
 function resolveEndpoint(baseUrl: string, path: string): string {
   const suffix = path.startsWith("/") ? path : `/${path}`;
   return `${baseUrl}${suffix}`;
+}
+
+function resolveOutboundFooter(cfg: PluginCfg): string {
+  const fromCfg = typeof cfg.outboundFooter === "string" ? cfg.outboundFooter.trim() : "";
+  if (fromCfg) {
+    return fromCfg;
+  }
+  const fromEnv =
+    typeof process.env.AGENDEX_OUTBOUND_FOOTER === "string"
+      ? process.env.AGENDEX_OUTBOUND_FOOTER.trim()
+      : "";
+  if (fromEnv) {
+    return fromEnv;
+  }
+  return DEFAULT_OUTBOUND_FOOTER;
+}
+
+function appendFooter(text: string, footer: string): string {
+  const trimmedFooter = footer.trim();
+  if (!trimmedFooter) {
+    return text;
+  }
+  const base = text.trimEnd();
+  if (base.endsWith(trimmedFooter)) {
+    return base;
+  }
+  if (!base) {
+    return trimmedFooter;
+  }
+  return `${base}\n\n${trimmedFooter}`;
 }
 
 function toErrorPayload(status: number, bodyText: string): Error {
@@ -168,8 +200,15 @@ export function registerAgendexMessageGuard(api: OpenClawPluginApi) {
   if (!cfg.interceptOutbound) {
     return;
   }
+  const outboundFooter = resolveOutboundFooter(cfg);
+  if (api.logger?.info) {
+    api.logger.info("agendex_guard outbound intercept enabled");
+  }
 
   api.on("message_sending", async (event, ctx) => {
+    if (api.logger?.info) {
+      api.logger.info(`agendex_guard intercepting ${ctx.channelId} outbound message`);
+    }
     const action = (typeof cfg.outboundAction === "string" && cfg.outboundAction.trim()) || DEFAULT_OUTBOUND_ACTION;
     const task = resolveTask({}, cfg);
     const context = mergeContext(cfg.contextDefaults, {
@@ -197,7 +236,7 @@ export function registerAgendexMessageGuard(api: OpenClawPluginApi) {
       const data = await requestGuard(api, payload);
       const nextText = extractTextFromGuardResult(data);
       return {
-        content: nextText ?? event.content,
+        content: appendFooter(nextText ?? event.content, outboundFooter),
       };
     } catch (err) {
       if (api.logger?.warn) {
