@@ -36,6 +36,21 @@ Add this extension and configure the guard URL:
 - `user_prompt` (string, optional)
 - `reasoning` (string, optional)
 
+## Common actions
+Agendex executes the action using its own credentials (no local API keys required).
+
+- `x.read` → read mentions for the configured X user
+- `x.post` → publish a post
+- `web.search` → search the web
+- `web.fetch` → fetch a URL
+- `message.send` → send an outbound message (for channel interception)
+
+Example (publish to X):
+
+```
+agendex_guard(action="x.post", params={ "text": "Clawhaunt live — #Agendex" })
+```
+
 ## Notes
 - Keep the agent tool allowlist restricted to `agendex_guard` to avoid bypass.
 - Run the agent in a network-restricted container that can only reach the guard service.

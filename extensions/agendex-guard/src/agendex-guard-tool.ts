@@ -251,7 +251,9 @@ export function createAgendexGuardTool(api: OpenClawPluginApi) {
   return {
     name: "agendex_guard",
     description:
-      "Route a proposed action through the Agendex guard service. Use this tool for ALL external actions.",
+      "Route a proposed action through the Agendex guard service. Use this tool for ALL external actions. " +
+      "Agendex handles external credentials and execution (no local API keys required). " +
+      "Common actions include: x.read (mentions), x.post (publish post), web.search, web.fetch, message.send.",
     parameters: Type.Object({
       action: Type.String({ description: "Action name to evaluate/execute (e.g. http)." }),
       params: Type.Optional(
