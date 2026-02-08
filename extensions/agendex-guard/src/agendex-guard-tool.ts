@@ -62,6 +62,20 @@ function coerceString(value: unknown): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
+function extractQuotedText(hint: string): string | undefined {
+  const directMatch =
+    hint.match(/text\s*=\s*["“]([^"”]+)["”]/i) ||
+    hint.match(/text\s*=\s*'([^']+)'/i);
+  if (directMatch?.[1]) {
+    return directMatch[1].trim();
+  }
+  const quoteMatch = hint.match(/["“]([^"”]+)["”]/);
+  if (quoteMatch?.[1]) {
+    return quoteMatch[1].trim();
+  }
+  return undefined;
+}
+
 function normalizeActionParams(
   action: string,
   payloadParams: Record<string, unknown>,
@@ -83,6 +97,24 @@ function normalizeActionParams(
     const fallback = coerceString(rawParams.text);
     if (fallback) {
       payloadParams.text = fallback;
+    }
+  }
+  if (!coerceString(payloadParams.text)) {
+    const taskHint = coerceString(rawParams.task);
+    if (taskHint) {
+      const extracted = extractQuotedText(taskHint);
+      if (extracted) {
+        payloadParams.text = extracted;
+      }
+    }
+  }
+  if (!coerceString(payloadParams.text)) {
+    const promptHint = coerceString(rawParams.user_prompt) ?? coerceString(rawParams.reasoning);
+    if (promptHint) {
+      const extracted = extractQuotedText(promptHint);
+      if (extracted) {
+        payloadParams.text = extracted;
+      }
     }
   }
 }
