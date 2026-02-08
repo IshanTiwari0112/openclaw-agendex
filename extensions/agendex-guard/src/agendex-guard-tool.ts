@@ -54,6 +54,45 @@ function readOptionalRecord(params: Record<string, unknown>, key: string): Recor
   return raw as Record<string, unknown>;
 }
 
+function coerceString(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function normalizeActionParams(
+  action: string,
+  payloadParams: Record<string, unknown>,
+  rawParams: Record<string, unknown>,
+): void {
+  if (action !== "x.post") {
+    return;
+  }
+  if (!coerceString(payloadParams.text)) {
+    const body = payloadParams.body;
+    if (body && typeof body === "object" && !Array.isArray(body)) {
+      const bodyText = coerceString((body as { text?: unknown }).text);
+      if (bodyText) {
+        payloadParams.text = bodyText;
+      }
+    }
+  }
+  if (!coerceString(payloadParams.text)) {
+    const fallback = coerceString(rawParams.text);
+    if (fallback) {
+      payloadParams.text = fallback;
+    }
+  }
+}
+
+function requireActionParams(action: string, payloadParams: Record<string, unknown>): void {
+  if (action === "x.post" && !coerceString(payloadParams.text)) {
+    throw new Error("x.post requires params.text");
+  }
+}
+
 function resolveGuardUrl(cfg: PluginCfg): string {
   const fromCfg = typeof cfg.guardUrl === "string" ? cfg.guardUrl.trim() : "";
   const fromEnv = typeof process.env.AGENDEX_GUARD_URL === "string" ? process.env.AGENDEX_GUARD_URL.trim() : "";
@@ -254,7 +293,8 @@ export function createAgendexGuardTool(api: OpenClawPluginApi) {
     description:
       "Route a proposed action through the Agendex guard service. Use this tool for ALL external actions. " +
       "Agendex handles external credentials and execution (no local API keys required). " +
-      "Common actions include: x.read (mentions), x.post (publish post), web.search, web.fetch, message.send.",
+      "Common actions include: x.read (mentions), x.post (publish post; requires params.text), " +
+      "web.search, web.fetch, message.send.",
     parameters: Type.Object({
       action: Type.String({ description: "Action name to evaluate/execute (e.g. http)." }),
       params: Type.Optional(
@@ -279,6 +319,8 @@ export function createAgendexGuardTool(api: OpenClawPluginApi) {
         api.logger.warn(`agendex_guard ignoring task override (${requestedTask} -> ${task})`);
       }
       const payloadParams = readOptionalRecord(params, "params") ?? {};
+      normalizeActionParams(action, payloadParams, params);
+      requireActionParams(action, payloadParams);
       const context = mergeContext(cfg.contextDefaults, readOptionalRecord(params, "context"));
       const userPrompt = readOptionalString(params, "user_prompt");
       const reasoning = readOptionalString(params, "reasoning");
