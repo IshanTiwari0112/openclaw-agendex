@@ -36,6 +36,8 @@ Add this extension and configure the guard URL:
 - `user_prompt` (string, optional)
 - `reasoning` (string, optional)
 
+Note: If `defaultTask` is set in the plugin config, task overrides are ignored.
+
 ## Common actions
 Agendex executes the action using its own credentials (no local API keys required).
 

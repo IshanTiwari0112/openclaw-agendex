@@ -69,13 +69,13 @@ function resolveTimeoutMs(cfg: PluginCfg): number {
 }
 
 function resolveTask(params: Record<string, unknown>, cfg: PluginCfg): string {
-  const fromParams = readOptionalString(params, "task");
-  if (fromParams) {
-    return fromParams;
-  }
   const fromCfg = typeof cfg.defaultTask === "string" ? cfg.defaultTask.trim() : "";
   if (fromCfg) {
     return fromCfg;
+  }
+  const fromParams = readOptionalString(params, "task");
+  if (fromParams) {
+    return fromParams;
   }
   const fromEnv = typeof process.env.AGENDEX_TASK === "string" ? process.env.AGENDEX_TASK.trim() : "";
   if (fromEnv) {
@@ -272,7 +272,11 @@ export function createAgendexGuardTool(api: OpenClawPluginApi) {
       const cfg = (api.pluginConfig ?? {}) as PluginCfg;
 
       const action = readRequiredString(params, "action");
+      const requestedTask = readOptionalString(params, "task");
       const task = resolveTask(params, cfg);
+      if (requestedTask && requestedTask !== task && api.logger?.warn) {
+        api.logger.warn(`agendex_guard ignoring task override (${requestedTask} -> ${task})`);
+      }
       const payloadParams = readOptionalRecord(params, "params") ?? {};
       const context = mergeContext(cfg.contextDefaults, readOptionalRecord(params, "context"));
       const userPrompt = readOptionalString(params, "user_prompt");
