@@ -76,15 +76,31 @@ function extractQuotedText(hint: string): string | undefined {
   return undefined;
 }
 
+function extractSearchQuery(hint: string): string | undefined {
+  const quoted = extractQuotedText(hint);
+  if (quoted) {
+    return quoted;
+  }
+  const lowered = hint.toLowerCase();
+  const tokens = ["search for", "search", "find", "lookup", "query"];
+  for (const token of tokens) {
+    const idx = lowered.indexOf(token);
+    if (idx >= 0) {
+      const candidate = hint.slice(idx + token.length).trim();
+      if (candidate) {
+        return candidate;
+      }
+    }
+  }
+  return hint.trim() || undefined;
+}
+
 function normalizeActionParams(
   action: string,
   payloadParams: Record<string, unknown>,
   rawParams: Record<string, unknown>,
 ): void {
-  if (action !== "x.post") {
-    return;
-  }
-  if (!coerceString(payloadParams.text)) {
+  if (action === "x.post" && !coerceString(payloadParams.text)) {
     const body = payloadParams.body;
     if (body && typeof body === "object" && !Array.isArray(body)) {
       const bodyText = coerceString((body as { text?: unknown }).text);
@@ -93,13 +109,13 @@ function normalizeActionParams(
       }
     }
   }
-  if (!coerceString(payloadParams.text)) {
+  if (action === "x.post" && !coerceString(payloadParams.text)) {
     const fallback = coerceString(rawParams.text);
     if (fallback) {
       payloadParams.text = fallback;
     }
   }
-  if (!coerceString(payloadParams.text)) {
+  if (action === "x.post" && !coerceString(payloadParams.text)) {
     const taskHint = coerceString(rawParams.task);
     if (taskHint) {
       const extracted = extractQuotedText(taskHint);
@@ -108,7 +124,7 @@ function normalizeActionParams(
       }
     }
   }
-  if (!coerceString(payloadParams.text)) {
+  if (action === "x.post" && !coerceString(payloadParams.text)) {
     const promptHint = coerceString(rawParams.user_prompt) ?? coerceString(rawParams.reasoning);
     if (promptHint) {
       const extracted = extractQuotedText(promptHint);
@@ -117,11 +133,35 @@ function normalizeActionParams(
       }
     }
   }
+  if (action === "web_search" || action === "web.search") {
+    const query = coerceString(payloadParams.query) ?? coerceString(payloadParams.q);
+    if (!query) {
+      const rawQuery = coerceString(rawParams.query) ?? coerceString(rawParams.q);
+      if (rawQuery) {
+        payloadParams.query = rawQuery;
+      }
+    }
+    if (!coerceString(payloadParams.query)) {
+      const hint =
+        coerceString(rawParams.task) ??
+        coerceString(rawParams.user_prompt) ??
+        coerceString(rawParams.reasoning);
+      if (hint) {
+        const extracted = extractSearchQuery(hint);
+        if (extracted) {
+          payloadParams.query = extracted;
+        }
+      }
+    }
+  }
 }
 
 function requireActionParams(action: string, payloadParams: Record<string, unknown>): void {
   if (action === "x.post" && !coerceString(payloadParams.text)) {
     throw new Error("x.post requires params.text");
+  }
+  if ((action === "web_search" || action === "web.search") && !coerceString(payloadParams.query)) {
+    throw new Error("web_search requires params.query");
   }
 }
 
@@ -326,7 +366,7 @@ export function createAgendexGuardTool(api: OpenClawPluginApi) {
       "Route a proposed action through the Agendex guard service. Use this tool for ALL external actions. " +
       "Agendex handles external credentials and execution (no local API keys required). " +
       "Common actions include: x.read (mentions), x.post (publish post; requires params.text), " +
-      "web.search, web.fetch, message.send.",
+      "web.search (requires params.query), web.fetch, message.send.",
     parameters: Type.Object({
       action: Type.String({ description: "Action name to evaluate/execute (e.g. http)." }),
       params: Type.Optional(
