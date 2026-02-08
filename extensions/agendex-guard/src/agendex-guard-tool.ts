@@ -322,7 +322,8 @@ function extractTextFromGuardResult(data: GuardResponse | string | null): string
   if (!result || typeof result !== "object") {
     return undefined;
   }
-  const params = (result as { params?: unknown }).params;
+  const resultObj = result as { params?: unknown; result?: unknown };
+  const params = resultObj.params ?? (resultObj.result as { params?: unknown } | undefined)?.params;
   if (!params || typeof params !== "object") {
     return undefined;
   }
@@ -337,6 +338,49 @@ function extractTextFromGuardResult(data: GuardResponse | string | null): string
     }
   }
   return undefined;
+}
+
+function buildGuardSummary(data: GuardResponse | string | null, error?: string): string | undefined {
+  if (error) {
+    return `Agendex error: ${error}`;
+  }
+  if (!data) {
+    return "Agendex: ok";
+  }
+  if (typeof data === "string") {
+    return `Agendex: ${data}`;
+  }
+  const resultObj = data.result && typeof data.result === "object" ? (data.result as Record<string, unknown>) : {};
+  const decision = coerceString((data as { decision?: unknown }).decision);
+  const approvalId =
+    coerceString((data as { approval_id?: unknown }).approval_id) ??
+    coerceString((resultObj as { approval_id?: unknown }).approval_id);
+  const action =
+    coerceString((data as { action?: unknown }).action) ?? coerceString((resultObj as { action?: unknown }).action);
+  const status =
+    coerceString((resultObj as { status?: unknown }).status) ??
+    (data as { success?: unknown }).success === true
+      ? "ok"
+      : (data as { success?: unknown }).success === false
+        ? "error"
+        : undefined;
+  const parts: string[] = [];
+  if (decision) {
+    parts.push(`decision=${decision}`);
+  }
+  if (status) {
+    parts.push(`status=${status}`);
+  }
+  if (action) {
+    parts.push(`action=${action}`);
+  }
+  if (approvalId) {
+    parts.push(`approval_id=${approvalId}`);
+  }
+  if (!parts.length) {
+    return "Agendex: ok";
+  }
+  return `Agendex: ${parts.join(", ")}`;
 }
 
 export function registerAgendexMessageGuard(api: OpenClawPluginApi) {
@@ -455,25 +499,32 @@ export function createAgendexGuardTool(api: OpenClawPluginApi) {
 
       try {
         const data = await requestGuard(api, payload);
+        const summary = buildGuardSummary(data);
+        const responseBody = data ?? { ok: true };
         return {
           content: [
             {
               type: "text",
-              text: JSON.stringify(data ?? { ok: true }, null, 2),
+              text: summary
+                ? `${summary}\n${JSON.stringify(responseBody, null, 2)}`
+                : JSON.stringify(responseBody, null, 2),
             },
           ],
-          details: data ?? { ok: true },
+          details: summary ? { summary, data: responseBody } : responseBody,
         };
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
+        const summary = buildGuardSummary(null, message);
         return {
           content: [
             {
               type: "text",
-              text: JSON.stringify({ ok: false, error: message }, null, 2),
+              text: summary
+                ? `${summary}\n${JSON.stringify({ ok: false, error: message }, null, 2)}`
+                : JSON.stringify({ ok: false, error: message }, null, 2),
             },
           ],
-          details: { ok: false, error: message },
+          details: summary ? { ok: false, error: message, summary } : { ok: false, error: message },
         };
       }
     },
