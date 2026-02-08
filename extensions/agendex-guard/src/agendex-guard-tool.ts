@@ -28,6 +28,14 @@ type GuardResponse = {
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_OUTBOUND_ACTION = "message.send";
 const DEFAULT_OUTBOUND_FOOTER = "— Verified by Agendex";
+let lastInboundText: string | undefined;
+
+function recordInboundText(text?: string): void {
+  const trimmed = typeof text === "string" ? text.trim() : "";
+  if (trimmed) {
+    lastInboundText = trimmed;
+  }
+}
 
 function readRequiredString(params: Record<string, unknown>, key: string, label = key): string {
   const raw = params[key];
@@ -154,11 +162,35 @@ function normalizeActionParams(
       }
     }
   }
+  if (action === "x.search") {
+    const query = coerceString(payloadParams.query) ?? coerceString(payloadParams.q);
+    if (!query) {
+      const rawQuery = coerceString(rawParams.query) ?? coerceString(rawParams.q);
+      if (rawQuery) {
+        payloadParams.query = rawQuery;
+      }
+    }
+    if (!coerceString(payloadParams.query)) {
+      const hint =
+        coerceString(rawParams.task) ??
+        coerceString(rawParams.user_prompt) ??
+        coerceString(rawParams.reasoning);
+      if (hint) {
+        const extracted = extractSearchQuery(hint);
+        if (extracted) {
+          payloadParams.query = extracted;
+        }
+      }
+    }
+  }
 }
 
 function requireActionParams(action: string, payloadParams: Record<string, unknown>): void {
   if (action === "x.post" && !coerceString(payloadParams.text)) {
     throw new Error("x.post requires params.text");
+  }
+  if (action === "x.search" && !coerceString(payloadParams.query)) {
+    throw new Error("x.search requires params.query");
   }
   if ((action === "web_search" || action === "web.search") && !coerceString(payloadParams.query)) {
     throw new Error("web_search requires params.query");
@@ -317,6 +349,10 @@ export function registerAgendexMessageGuard(api: OpenClawPluginApi) {
     api.logger.info("agendex_guard outbound intercept enabled");
   }
 
+  api.on("message_received", (event) => {
+    recordInboundText(event.content);
+  });
+
   api.on("message_sending", async (event, ctx) => {
     if (api.logger?.info) {
       api.logger.info(`agendex_guard intercepting ${ctx.channelId} outbound message`);
@@ -384,18 +420,23 @@ export function createAgendexGuardTool(api: OpenClawPluginApi) {
     async execute(_id: string, params: Record<string, unknown>) {
       const cfg = (api.pluginConfig ?? {}) as PluginCfg;
 
-      const action = readRequiredString(params, "action");
-      const requestedTask = readOptionalString(params, "task");
-      const task = resolveTask(params, cfg);
+      const enrichedParams: Record<string, unknown> = { ...params };
+      if (!readOptionalString(enrichedParams, "user_prompt") && lastInboundText) {
+        enrichedParams.user_prompt = lastInboundText;
+      }
+
+      const action = readRequiredString(enrichedParams, "action");
+      const requestedTask = readOptionalString(enrichedParams, "task");
+      const task = resolveTask(enrichedParams, cfg);
       if (requestedTask && requestedTask !== task && api.logger?.warn) {
         api.logger.warn(`agendex_guard ignoring task override (${requestedTask} -> ${task})`);
       }
-      const payloadParams = readOptionalRecord(params, "params") ?? {};
-      normalizeActionParams(action, payloadParams, params);
+      const payloadParams = readOptionalRecord(enrichedParams, "params") ?? {};
+      normalizeActionParams(action, payloadParams, enrichedParams);
       requireActionParams(action, payloadParams);
-      const context = mergeContext(cfg.contextDefaults, readOptionalRecord(params, "context"));
-      const userPrompt = readOptionalString(params, "user_prompt");
-      const reasoning = readOptionalString(params, "reasoning");
+      const context = mergeContext(cfg.contextDefaults, readOptionalRecord(enrichedParams, "context"));
+      const userPrompt = readOptionalString(enrichedParams, "user_prompt");
+      const reasoning = readOptionalString(enrichedParams, "reasoning");
 
       const payload: GuardPayload = {
         task,
