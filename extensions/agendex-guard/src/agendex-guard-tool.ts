@@ -131,7 +131,8 @@ function appendFooter(text: string, footer: string): string {
 
 function toErrorPayload(status: number, bodyText: string): Error {
   const msg = bodyText.trim() ? bodyText.trim() : "guard request failed";
-  return new Error(`guard request failed (${status}): ${msg}`);
+  const trimmed = msg.length > 2000 ? `${msg.slice(0, 2000)}…` : msg;
+  return new Error(`guard request failed (${status}): ${trimmed}`);
 }
 
 async function requestGuard(api: OpenClawPluginApi, payload: GuardPayload): Promise<GuardResponse | string | null> {
@@ -297,17 +298,29 @@ export function createAgendexGuardTool(api: OpenClawPluginApi) {
         payload.reasoning = reasoning;
       }
 
-      const data = await requestGuard(api, payload);
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(data ?? { ok: true }, null, 2),
-          },
-        ],
-        details: data ?? { ok: true },
-      };
+      try {
+        const data = await requestGuard(api, payload);
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(data ?? { ok: true }, null, 2),
+            },
+          ],
+          details: data ?? { ok: true },
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({ ok: false, error: message }, null, 2),
+            },
+          ],
+          details: { ok: false, error: message },
+        };
+      }
     },
   };
 }
