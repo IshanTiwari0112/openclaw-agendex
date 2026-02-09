@@ -71,8 +71,18 @@
   },
   "tools": {
     "allow": [
-      "agendex_guard"
-    ]
+      "agendex_guard",
+      "web_search",
+      "web_fetch"
+    ],
+    "web": {
+      "search": {
+        "enabled": false
+      },
+      "fetch": {
+        "enabled": false
+      }
+    }
   },
   "logging": {
     "consoleLevel": "info",
