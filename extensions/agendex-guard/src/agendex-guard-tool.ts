@@ -383,6 +383,140 @@ function buildGuardSummary(data: GuardResponse | string | null, error?: string):
   return `Agendex: ${parts.join(", ")}`;
 }
 
+type AliasToolSpec = {
+  name: string;
+  action: string;
+  description: string;
+  parameters: ReturnType<typeof Type.Object>;
+};
+
+function buildAliasPayload(
+  cfg: PluginCfg,
+  action: string,
+  params: Record<string, unknown>,
+): GuardPayload {
+  const enrichedParams: Record<string, unknown> = { ...params };
+  if (!readOptionalString(enrichedParams, "user_prompt") && lastInboundText) {
+    enrichedParams.user_prompt = lastInboundText;
+  }
+
+  const task = resolveTask(enrichedParams, cfg);
+  const payloadParams: Record<string, unknown> = { ...enrichedParams };
+  delete payloadParams.task;
+  delete payloadParams.context;
+  delete payloadParams.user_prompt;
+  delete payloadParams.reasoning;
+
+  normalizeActionParams(action, payloadParams, enrichedParams);
+  requireActionParams(action, payloadParams);
+
+  const context = mergeContext(cfg.contextDefaults, readOptionalRecord(enrichedParams, "context"));
+  const payload: GuardPayload = {
+    task,
+    action,
+    params: payloadParams,
+  };
+  if (context) {
+    payload.context = context;
+  }
+  const userPrompt = readOptionalString(enrichedParams, "user_prompt");
+  const reasoning = readOptionalString(enrichedParams, "reasoning");
+  if (userPrompt) {
+    payload.user_prompt = userPrompt;
+  }
+  if (reasoning) {
+    payload.reasoning = reasoning;
+  }
+  return payload;
+}
+
+function createAgendexAliasTool(api: OpenClawPluginApi, spec: AliasToolSpec) {
+  return {
+    name: spec.name,
+    description: spec.description,
+    parameters: spec.parameters,
+    async execute(_id: string, args: Record<string, unknown>) {
+      const cfg = (api.pluginConfig ?? {}) as PluginCfg;
+      const payload = buildAliasPayload(cfg, spec.action, args ?? {});
+      try {
+        const data = await requestGuard(api, payload);
+        const summary = buildGuardSummary(data);
+        const responseBody = data ?? { ok: true };
+        return {
+          content: [
+            {
+              type: "text",
+              text: summary
+                ? `${summary}\n${JSON.stringify(responseBody, null, 2)}`
+                : JSON.stringify(responseBody, null, 2),
+            },
+          ],
+          details: summary ? { summary, data: responseBody } : responseBody,
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        const summary = buildGuardSummary(null, message);
+        return {
+          content: [
+            {
+              type: "text",
+              text: summary
+                ? `${summary}\n${JSON.stringify({ ok: false, error: message }, null, 2)}`
+                : JSON.stringify({ ok: false, error: message }, null, 2),
+            },
+          ],
+          details: summary ? { ok: false, error: message, summary } : { ok: false, error: message },
+        };
+      }
+    },
+  };
+}
+
+export function createAgendexWebSearchTool(api: OpenClawPluginApi) {
+  return createAgendexAliasTool(api, {
+    name: "web_search",
+    action: "web.search",
+    description:
+      "Search the web via Agendex (Brave Search). Always routes through Agendex governance.",
+    parameters: Type.Object({
+      query: Type.Optional(Type.String({ description: "Search query." })),
+      q: Type.Optional(Type.String({ description: "Search query (alias)." })),
+      max_results: Type.Optional(Type.Number({ description: "Max results (1-10)." })),
+      freshness: Type.Optional(Type.String({ description: "Freshness window (day/week/month)." })),
+      country: Type.Optional(Type.String({ description: "Country code filter." })),
+      language: Type.Optional(Type.String({ description: "Language code filter." })),
+      task: Type.Optional(Type.String({ description: "Optional task label override." })),
+      context: Type.Optional(
+        Type.Object({}, { additionalProperties: true, description: "Extra context for policy decisions." }),
+      ),
+      user_prompt: Type.Optional(Type.String({ description: "Optional user prompt summary." })),
+      reasoning: Type.Optional(Type.String({ description: "Optional reasoning for intent scoring." })),
+    }),
+  });
+}
+
+export function createAgendexWebFetchTool(api: OpenClawPluginApi) {
+  return createAgendexAliasTool(api, {
+    name: "web_fetch",
+    action: "web.fetch",
+    description:
+      "Fetch a URL via Agendex (read-only). Always routes through Agendex governance.",
+    parameters: Type.Object({
+      url: Type.String({ description: "URL to fetch." }),
+      method: Type.Optional(Type.String({ description: "HTTP method (GET/HEAD)." })),
+      headers: Type.Optional(
+        Type.Object({}, { additionalProperties: true, description: "Optional request headers." }),
+      ),
+      task: Type.Optional(Type.String({ description: "Optional task label override." })),
+      context: Type.Optional(
+        Type.Object({}, { additionalProperties: true, description: "Extra context for policy decisions." }),
+      ),
+      user_prompt: Type.Optional(Type.String({ description: "Optional user prompt summary." })),
+      reasoning: Type.Optional(Type.String({ description: "Optional reasoning for intent scoring." })),
+    }),
+  });
+}
+
 export function registerAgendexMessageGuard(api: OpenClawPluginApi) {
   const cfg = (api.pluginConfig ?? {}) as PluginCfg;
   if (!cfg.interceptOutbound) {

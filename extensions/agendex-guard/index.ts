@@ -1,7 +1,14 @@
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
-import { createAgendexGuardTool, registerAgendexMessageGuard } from "./src/agendex-guard-tool.ts";
+import {
+  createAgendexGuardTool,
+  createAgendexWebFetchTool,
+  createAgendexWebSearchTool,
+  registerAgendexMessageGuard,
+} from "./src/agendex-guard-tool.ts";
 
 export default function register(api: OpenClawPluginApi) {
   registerAgendexMessageGuard(api);
   api.registerTool(createAgendexGuardTool(api), { optional: true });
+  api.registerTool(createAgendexWebSearchTool(api), { optional: true });
+  api.registerTool(createAgendexWebFetchTool(api), { optional: true });
 }
